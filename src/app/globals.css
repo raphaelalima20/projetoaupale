@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * AUPALE palette — RGB channels (space separated) so Tailwind can apply alpha.
+ * Light: rosa claro #FCE8DD (fundo), branco (cards), nude rosé #C7A593 (primário), dourado (acentos).
+ * Dark:  marrons #2D1F14 / #3D2B1E, mantendo o dourado como acento.
+ */
+:root {
+  color-scheme: light;
+
+  --background: 252 232 221; /* #FCE8DD */
+  --surface: 255 255 255; /* #FFFFFF */
+  --surface2: 251 241 234; /* #FBF1EA */
+  --border: 234 213 200; /* #EAD5C8 */
+  --text: 74 55 40; /* #4A3728 */
+  --text-dim: 139 115 85; /* #8B7355 */
+  --overlay: 45 31 20;
+
+  --primary: 199 165 147; /* #C7A593 */
+  --primary-dark: 176 141 121; /* #B08D79 */
+  --primary-fg: 255 255 255;
+
+  /* Dourado: tons mais profundos no tema claro para manter contraste em texto */
+  --gold: 168 133 52; /* #A88534 */
+  --gold-light: 138 108 38; /* #8A6C26 */
+  --gold-dark: 112 86 28;
+
+  --success: 46 125 50;
+  --danger: 192 57 43;
+  --info: 43 124 184;
+  --warn: 184 108 0;
+  --pink: 214 51 108;
+
+  --shadow-soft: 0 2px 14px rgb(74 55 40 / 0.07);
+  --shadow-modal: 0 18px 50px rgb(74 55 40 / 0.22);
+
+  --scroll-track: #fce8dd;
+  --scroll-thumb: #e2c9bb;
+  --scroll-thumb-hover: #c7a593;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: 45 31 20; /* #2D1F14 */
+  --surface: 61 43 30; /* #3D2B1E */
+  --surface2: 77 56 40; /* #4D3828 */
+  --border: 98 74 55; /* #624A37 */
+  --text: 247 236 226; /* #F7ECE2 */
+  --text-dim: 190 168 148; /* #BEA894 */
+  --overlay: 20 12 6;
+
+  --primary: 199 165 147;
+  --primary-dark: 176 141 121;
+  --primary-fg: 255 255 255;
+
+  --gold: 212 175 55; /* #D4AF37 */
+  --gold-light: 232 205 116; /* #E8CD74 */
+  --gold-dark: 184 150 78; /* #B8964E */
+
+  --success: 108 190 112;
+  --danger: 236 130 122;
+  --info: 110 181 240;
+  --warn: 255 183 77;
+  --pink: 240 98 146;
+
+  --shadow-soft: 0 2px 14px rgb(0 0 0 / 0.25);
+  --shadow-modal: 0 18px 50px rgb(0 0 0 / 0.5);
+
+  --scroll-track: #2d1f14;
+  --scroll-thumb: #624a37;
+  --scroll-thumb-hover: #7a5e47;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: rgb(var(--background));
+  color: rgb(var(--text));
+}
+
+body {
+  font-family: var(--font-montserrat), system-ui, sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-weight: 500;
+}
+
+/* Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scroll-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 8px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+}
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--text));
+  -webkit-box-shadow: 0 0 0px 1000px rgb(var(--surface2)) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Native date/time pickers follow the active theme */
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Gold gradient from the brand palette (#D4AF37 → #B8964E) */
+  .bg-gold-gradient {
+    background-image: linear-gradient(135deg, #d4af37 0%, #b8964e 100%);
+  }
+  .text-gold-gradient {
+    background-image: linear-gradient(135deg, #d4af37 0%, #a88534 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
