@@ -175,7 +175,8 @@ function LoginForm() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-background px-4">
+    // Mobile: content starts near the top (pt-8). From md up it stays vertically centered as before.
+    <div className="relative flex min-h-screen items-start justify-center bg-background px-4 pt-8 md:items-center md:pt-0">
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
