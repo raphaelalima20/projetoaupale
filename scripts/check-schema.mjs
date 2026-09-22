@@ -36,7 +36,7 @@ await db.exec(`
 
   create publication supabase_realtime;
 
-  grant usage on schema public, auth to anon, authenticated, service_role;
+  grant usage on schema public, auth, storage to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
   grant select on auth.users to service_role;
@@ -107,12 +107,15 @@ await db.exec(`
 const [corte] = await q(`select id from public.services where name = 'Corte'`);
 
 console.log("\nSeeds");
-await test("salon_settings, whatsapp_config, 3 templates e 2 buckets criados", async () => {
+await test("salon_settings, whatsapp_config, 3 templates e 3 buckets criados", async () => {
   assert((await q(`select 1 from public.salon_settings`)).length === 1);
   assert((await q(`select 1 from public.whatsapp_config`)).length === 1);
   const t = await q(`select tipo from public.whatsapp_templates order by tipo`);
   assert(t.map((r) => r.tipo).join() === "aniversario,confirmacao,lembrete", "templates");
-  assert((await q(`select 1 from storage.buckets`)).length === 2);
+  const buckets = await q(`select id, public from storage.buckets order by id`);
+  assert(buckets.length === 3, `esperava 3 buckets, veio ${buckets.length}`);
+  const clienteFotos = buckets.find((b) => b.id === "cliente-fotos");
+  assert(clienteFotos && clienteFotos.public === false, "cliente-fotos deveria ser privado");
 });
 await test("templates padrão contêm as variáveis pedidas", async () => {
   const [l] = await q(`select mensagem_template m from public.whatsapp_templates where tipo='lembrete'`);
@@ -145,7 +148,7 @@ await test("anon consegue chamar admin_exists()", async () => {
   assert(r.e === true);
 });
 await test("anon NÃO consegue chamar pay_commissions nem claim_whatsapp_messages", async () => {
-  await as("anon", null, () => rejects(q(`select public.pay_commissions('${COLLAB}', array[gen_random_uuid()], 'pix', false, 0, null)`), /permission denied/));
+  await as("anon", null, () => rejects(q(`select public.pay_commissions('${COLLAB}', array[gen_random_uuid()], 'pix', false, null)`), /permission denied/));
   await as("anon", null, () => rejects(q(`select * from public.claim_whatsapp_messages(5)`), /permission denied/));
 });
 await test("anon cria pedido 'pendente' mas não 'pago'", async () => {
@@ -236,41 +239,135 @@ await test("colaboradora vê só as próprias comissões; outra não vê", async
 });
 await test("colaboradora NÃO consegue pagar comissão", async () => {
   const ids = (await q(`select id from public.commissions`)).map((r) => r.id);
-  await as("authenticated", COLLAB, () => rejects(q(`select public.pay_commissions($1, $2::uuid[], 'pix', false, 0, null)`, [COLLAB, ids]), /Apenas administradoras/));
+  await as("authenticated", COLLAB, () => rejects(q(`select public.pay_commissions($1, $2::uuid[], 'pix', false, null)`, [COLLAB, ids]), /Apenas administradoras/));
 });
 await test("pagar incidindo no caixa exige caixa aberto (nada é gravado se falhar)", async () => {
   const ids = (await q(`select id from public.commissions`)).map((r) => r.id);
-  await as("authenticated", ADMIN, () => rejects(q(`select public.pay_commissions($1, $2::uuid[], 'pix', true, 0, null)`, [COLLAB, ids]), /Abra o caixa/));
+  await as("authenticated", ADMIN, () => rejects(q(`select public.pay_commissions($1, $2::uuid[], 'pix', true, null)`, [COLLAB, ids]), /Abra o caixa/));
   assert((await q(`select 1 from public.commission_payments`)).length === 0);
   assert((await q(`select 1 from public.commissions where is_paid`)).length === 0);
 });
-await test("pagamento com vale: zera comissões, registra saída = líquido e grava original/vale", async () => {
-  await as("authenticated", ADMIN, () => q(`insert into public.cash_register (opening_amount, opened_by) values (100, '${ADMIN}')`));
-  const ids = (await q(`select id from public.commissions`)).map((r) => r.id);
-  const [{ pay_commissions: paymentId }] = await as("authenticated", ADMIN, () =>
-    q(`select public.pay_commissions($1, $2::uuid[], 'pix', true, 20, 'vale adiantamento')`, [COLLAB, ids])
+await test("vale (Funcionalidade 3): admin lê/lança; colaboradora e anon não conseguem", async () => {
+  await as("anon", null, () => rejects(q(`select * from public.vales`), /permission denied/));
+  await as("authenticated", COLLAB, () =>
+    rejects(q(`insert into public.vales (colaboradora_id, valor, descricao) values ('${COLLAB}', 20, 'x')`), /row-level security/)
   );
-  const [p] = await q(`select total_amount, original_amount, vale_amount, services_count, period_start::text ps, period_end::text pe from public.commission_payments where id=$1`, [paymentId]);
+  const [v] = await as("authenticated", ADMIN, () =>
+    q(`insert into public.vales (colaboradora_id, valor, descricao, created_by) values ('${COLLAB}', 20, 'vale adiantamento', '${ADMIN}') returning id, commission_payment_id`)
+  );
+  assert(v.commission_payment_id === null, "vale recém-lançado deve começar em aberto");
+});
+await test("pagamento desconta o vale em aberto automaticamente: zera comissões, saída = líquido, grava original/vale e marca o vale como consumido", async () => {
+  await as("authenticated", ADMIN, () => q(`insert into public.cash_register (opening_amount, opened_by) values (100, '${ADMIN}')`));
+  const ids = (await q(`select id from public.commissions where collaborator_id='${COLLAB}'`)).map((r) => r.id);
+  const [{ pay_commissions: paymentId }] = await as("authenticated", ADMIN, () =>
+    q(`select public.pay_commissions($1, $2::uuid[], 'pix', true, 'pagamento semanal')`, [COLLAB, ids])
+  );
+  const [p] = await q(`select total_amount, original_amount, vale_amount, services_count, period_start::text ps from public.commission_payments where id=$1`, [paymentId]);
   assert(Number(p.original_amount) === 120 && Number(p.vale_amount) === 20 && Number(p.total_amount) === 100 && p.services_count === 2, JSON.stringify(p));
   assert(p.ps === "2030-05-11");
-  assert((await q(`select 1 from public.commissions where is_paid = false`)).length === 0, "comissões deveriam zerar");
+  assert((await q(`select 1 from public.commissions where collaborator_id='${COLLAB}' and is_paid = false`)).length === 0, "comissões deveriam zerar");
   const [t] = await q(`select type, amount, category from public.cash_transactions where commission_payment_id=$1`, [paymentId]);
   assert(t.type === "saida" && Number(t.amount) === 100 && t.category === "comissao");
+  const [vale] = await q(`select commission_payment_id from public.vales where colaboradora_id='${COLLAB}'`);
+  assert(vale.commission_payment_id === paymentId, "vale deveria ficar vinculado a este pagamento");
 });
 await test("não é possível pagar as mesmas comissões duas vezes", async () => {
-  const ids = (await q(`select id from public.commissions`)).map((r) => r.id);
-  await as("authenticated", ADMIN, () => rejects(q(`select public.pay_commissions($1, $2::uuid[], 'pix', false, 0, null)`, [COLLAB, ids]), /já foram pagas/));
+  const ids = (await q(`select id from public.commissions where collaborator_id='${COLLAB}'`)).map((r) => r.id);
+  await as("authenticated", ADMIN, () => rejects(q(`select public.pay_commissions($1, $2::uuid[], 'pix', false, null)`, [COLLAB, ids]), /já foram pagas/));
 });
-await test("vale maior que o total é limitado ao total (valor líquido 0 não gera saída)", async () => {
+await test("vale maior que a comissão disponível: a comissão é paga normalmente e o vale inteiro fica em aberto (nunca é aplicado pela metade)", async () => {
   await db.exec(`insert into public.appointments (client_name, client_phone, collaborator_id, service_name, service_price, appointment_date, appointment_time, status, final_amount, commission_value)
     values ('Z','11933332222','${COLLAB2}','Corte',100,'2030-05-12','09:00','agendado',100,10)`);
   await db.exec(`update public.appointments set status='concluido' where client_phone='11933332222'`);
+  await as("authenticated", ADMIN, () => q(`insert into public.vales (colaboradora_id, valor, data) values ('${COLLAB2}', 9999, '2035-01-01')`));
   const ids = (await q(`select id from public.commissions where collaborator_id='${COLLAB2}'`)).map((r) => r.id);
   const before = (await q(`select 1 from public.cash_transactions`)).length;
-  const [{ pay_commissions: id }] = await as("authenticated", ADMIN, () => q(`select public.pay_commissions($1, $2::uuid[], 'dinheiro', true, 9999, null)`, [COLLAB2, ids]));
+  const [{ pay_commissions: id }] = await as("authenticated", ADMIN, () => q(`select public.pay_commissions($1, $2::uuid[], 'dinheiro', true, null)`, [COLLAB2, ids]));
   const [p] = await q(`select total_amount, vale_amount from public.commission_payments where id=$1`, [id]);
-  assert(Number(p.total_amount) === 0 && Number(p.vale_amount) === 10);
-  assert((await q(`select 1 from public.cash_transactions`)).length === before, "não deveria criar saída de 0");
+  // O vale de 9999 não coube nos 10 de comissão disponível, então fica intocado — os 10 são
+  // pagos normalmente (nada de "least()" que aplicaria uma fração dele).
+  assert(Number(p.total_amount) === 10 && Number(p.vale_amount) === 0, JSON.stringify(p));
+  assert((await q(`select 1 from public.cash_transactions`)).length === before + 1, "deveria lançar a saída de 10 no caixa");
+  const [vale] = await q(`select commission_payment_id from public.vales where colaboradora_id='${COLLAB2}'`);
+  assert(vale.commission_payment_id === null, "vale que não coube deve continuar em aberto");
+});
+await test("vale que cabe é consumido; o que não cabe continua em aberto para o próximo ciclo", async () => {
+  await db.exec(`insert into public.appointments (client_name, client_phone, collaborator_id, service_name, service_price, appointment_date, appointment_time, status, final_amount, commission_value)
+    values ('W','11933331111','${COLLAB2}','Corte',200,'2030-05-13','09:00','agendado',200,60)`);
+  await db.exec(`update public.appointments set status='concluido' where client_phone='11933331111'`);
+  // Vales em ordem cronológica: 10 (2020, mais antigo, cabe) e 9999 (2035, leftover do teste anterior, não cabe).
+  await as("authenticated", ADMIN, () => q(`insert into public.vales (colaboradora_id, valor, data) values ('${COLLAB2}', 10, '2020-01-01')`));
+  const ids = (await q(`select id from public.commissions where collaborator_id='${COLLAB2}' and is_paid = false`)).map((r) => r.id);
+  const [{ pay_commissions: id }] = await as("authenticated", ADMIN, () => q(`select public.pay_commissions($1, $2::uuid[], 'dinheiro', false, null)`, [COLLAB2, ids]));
+  const [p] = await q(`select total_amount, vale_amount from public.commission_payments where id=$1`, [id]);
+  assert(Number(p.vale_amount) === 10 && Number(p.total_amount) === 50, JSON.stringify(p));
+  const vales = await q(`select valor, commission_payment_id from public.vales where colaboradora_id='${COLLAB2}' order by valor`);
+  assert(Number(vales[0].valor) === 10 && vales[0].commission_payment_id === id, "vale de 10 deveria ter sido consumido");
+  assert(Number(vales[1].valor) === 9999 && vales[1].commission_payment_id === null, "vale de 9999 deveria continuar em aberto");
+});
+
+console.log("\nMega Hair (Funcionalidade 1)");
+await test("services.is_mega e appointments.mega_tipo/tipo_remuneracao/valor_fixo existem com os defaults certos", async () => {
+  const [s] = await q(`select is_mega from public.services limit 1`);
+  assert(s.is_mega === false);
+  await rejects(db.exec(`update public.appointments set mega_tipo='invalido' where id in (select id from public.appointments limit 1)`), /appointments_mega_tipo_check/);
+});
+await test("mega_especificacoes: valida técnica/tipo/combinação e limita a uma por agendamento", async () => {
+  const [svc] = await q(`insert into public.services (name, price, is_mega) values ('Mega Hair', 500, true) returning id`);
+  await db.exec(`insert into public.appointments (client_name, client_phone, collaborator_id, service_id, service_name, service_price, appointment_date, appointment_time, mega_tipo)
+    values ('Rosa','11900002222','${COLLAB}','${svc.id}','Mega Hair',0,'2030-07-01','10:00','aplicacao')`);
+  const [appt] = await q(`select id from public.appointments where client_phone='11900002222'`);
+
+  await rejects(
+    as("authenticated", ADMIN, () =>
+      q(`insert into public.mega_especificacoes (agendamento_id, tecnica, tipo, combinacao, valor_tecnica) values ('${appt.id}','invalida','aplicacao','Tela + Mesclado',300)`)
+    ),
+    /mega_especificacoes_tecnica_check/
+  );
+  await rejects(
+    as("authenticated", ADMIN, () =>
+      q(`insert into public.mega_especificacoes (agendamento_id, tecnica, tipo, combinacao, valor_tecnica) values ('${appt.id}','tela','aplicacao','Combinação Inventada',300)`)
+    ),
+    /mega_especificacoes_combinacao_check/
+  );
+
+  await as("authenticated", ADMIN, () =>
+    q(`insert into public.mega_especificacoes (agendamento_id, tecnica, tipo, combinacao, comprimento, gramas, valor_tecnica, valor_cabelo)
+       values ('${appt.id}','tela','aplicacao','Tela + Mesclado','60cm',150,350,150)`)
+  );
+  await rejects(
+    db.exec(`insert into public.mega_especificacoes (agendamento_id, tecnica, tipo, combinacao, valor_tecnica) values ('${appt.id}','fita','aplicacao','Fita + Mesclado',100)`),
+    /mega_especificacoes_agendamento_unique/
+  );
+
+  const [spec] = await q(`select valor_tecnica, valor_cabelo from public.mega_especificacoes where agendamento_id='${appt.id}'`);
+  assert(Number(spec.valor_tecnica) === 350 && Number(spec.valor_cabelo) === 150);
+});
+await test("mega_especificacoes: colaboradora insere, mas não edita nem apaga; anon não lê nada", async () => {
+  const [row] = await q(`select id from public.mega_especificacoes limit 1`);
+  await as("anon", null, () => rejects(q(`select * from public.mega_especificacoes`), /permission denied/));
+  assert((await as("authenticated", COLLAB2, () => q(`select 1 from public.mega_especificacoes`))).length >= 1);
+  // A policy de update é admin-only: a linha some do UPDATE sem erro (RLS filtra, não lança exceção).
+  const r = await as("authenticated", COLLAB2, () =>
+    q(`update public.mega_especificacoes set comprimento='70cm' where id='${row.id}' returning id`)
+  );
+  assert(r.length === 0, "colaboradora não deveria conseguir editar a especificação");
+});
+
+console.log("\nComissão vs Valor Fixo (Funcionalidade 2)");
+await test("concluir com tipo_remuneracao='valor_fixo' grava o valor combinado na comissão (não recalcula por %)", async () => {
+  await db.exec(`insert into public.appointments (client_name, client_phone, collaborator_id, service_name, service_price, appointment_date, appointment_time)
+    values ('Fixo','11900003333','${COLLAB}','Corte',100,'2030-07-02','09:00')`);
+  await db.exec(`update public.appointments
+     set status='concluido', final_amount=100, commission_value=80, tipo_remuneracao='valor_fixo', valor_fixo=80
+   where client_phone='11900003333'`);
+  const [c] = await q(`select commission_value, tipo_remuneracao, valor_fixo from public.commissions where client_name='Fixo'`);
+  assert(Number(c.commission_value) === 80 && c.tipo_remuneracao === "valor_fixo" && Number(c.valor_fixo) === 80, JSON.stringify(c));
+});
+await test("concluir sem informar tipo_remuneracao grava 'comissao' por padrão", async () => {
+  const [c] = await q(`select tipo_remuneracao, valor_fixo from public.commissions where client_name='Joana'`);
+  assert(c.tipo_remuneracao === "comissao" && c.valor_fixo === null, JSON.stringify(c));
 });
 await test("sessão de pacote: incrementa used_sessions e conclui o pacote na última", async () => {
   await db.exec(`insert into public.client_packages (client_name, client_phone, package_name, total_sessions, total_price) values ('Rita','11922221111','Pacote Mensal',2,400)`);
@@ -350,6 +447,42 @@ await test("admin lê o log da fila; anon e colaboradora não", async () => {
   assert((await as("authenticated", ADMIN, () => q(`select 1 from public.whatsapp_mensagens_fila`))).length === 2);
   assert((await as("authenticated", COLLAB, () => q(`select 1 from public.whatsapp_mensagens_fila`))).length === 0);
   await as("authenticated", ADMIN, () => rejects(q(`select * from public.whatsapp_config`), /permission denied/));
+});
+
+console.log("\nFotos do cliente — anamnese e acompanhamento (Funcionalidade 4)");
+await test("cliente_fotos: staff lê/escreve; anon não acessa nada", async () => {
+  const [client] = await q(`select id from public.clients where phone='11988887777'`);
+  await as("anon", null, () => rejects(q(`select * from public.cliente_fotos`), /permission denied/));
+  await as("anon", null, () =>
+    rejects(
+      q(`insert into public.cliente_fotos (cliente_id, tipo, nome, url, storage_path) values ('${client.id}','anamnese','Ficha','http://x','${client.id}/anamnese/a.jpg')`),
+      /permission denied/
+    )
+  );
+  const [foto] = await as("authenticated", COLLAB, () =>
+    q(
+      `insert into public.cliente_fotos (cliente_id, tipo, nome, url, storage_path, uploaded_by)
+       values ('${client.id}','anamnese','Ficha assinada','http://x','${client.id}/anamnese/a.jpg','${COLLAB}') returning id, tipo`
+    )
+  );
+  assert(foto.tipo === "anamnese");
+  assert((await as("authenticated", ADMIN, () => q(`select 1 from public.cliente_fotos where id='${foto.id}'`))).length === 1);
+  const del = await as("authenticated", COLLAB2, () => q(`delete from public.cliente_fotos where id='${foto.id}' returning id`));
+  assert(del.length === 1, "colaboradora autenticada deveria poder excluir (RLS: is_staff)");
+});
+await test("cliente_fotos: valida o tipo (só anamnese/acompanhamento)", async () => {
+  const [client] = await q(`select id from public.clients where phone='11988887777'`);
+  await rejects(
+    db.exec(`insert into public.cliente_fotos (cliente_id, tipo, nome, url, storage_path) values ('${client.id}','outro','X','http://x','p')`),
+    /cliente_fotos_tipo_check/
+  );
+});
+await test("storage 'cliente-fotos': só staff lê/escreve objetos do bucket", async () => {
+  await as("anon", null, () => rejects(q(`select * from storage.objects where bucket_id='cliente-fotos'`), /permission denied|row-level security/));
+  await as("authenticated", COLLAB, () =>
+    q(`insert into storage.objects (bucket_id, name) values ('cliente-fotos', 'x/anamnese/a.jpg')`)
+  );
+  assert((await as("authenticated", ADMIN, () => q(`select 1 from storage.objects where bucket_id='cliente-fotos'`))).length === 1);
 });
 
 console.log(`\n${passed} testes passaram, ${failures.length} falharam.`);

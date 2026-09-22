@@ -1,4 +1,4 @@
-import type { Profile, Service } from "./types/database";
+import type { MegaTipo, Profile, Service } from "./types/database";
 
 export interface PackageSessionInput {
   packageId: string;
@@ -17,6 +17,8 @@ export interface NewAppointmentInput {
   dateISO: string;
   time: string;
   notes?: string | null;
+  /** Required when `service.is_mega` — nothing technical, just Aplicação/Manutenção. */
+  megaTipo?: MegaTipo | null;
 }
 
 /**
@@ -45,6 +47,7 @@ export async function createAppointment(
         dateISO: input.dateISO,
         time: input.time,
         notes: input.notes ?? null,
+        megaTipo: input.megaTipo ?? null,
       }),
     });
     const body = await res.json().catch(() => ({}));

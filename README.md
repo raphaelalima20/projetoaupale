@@ -22,7 +22,8 @@ npm run dev                  # http://localhost:3000
 
 ## Banco de dados (Supabase)
 
-1. Abra **SQL Editor** e execute `supabase/migrations/20260921000000_aupale_schema.sql` **uma vez**
+1. Abra **SQL Editor** e execute, **nesta ordem**, `supabase/migrations/20260921000000_aupale_schema.sql`
+   e depois `supabase/migrations/20260922000000_aupale_features2.sql` — cada arquivo **uma vez**
    (tabelas, funções, triggers, RLS, views públicas, buckets de storage e seeds).
 2. Abra `/login` e use **"Primeiro acesso? Criar conta admin"**. Faça isso logo após o deploy: o
    primeiro acesso fica aberto até existir uma administradora.
@@ -39,7 +40,23 @@ Validação local do schema (Postgres real em WASM, sem tocar no Supabase): `npm
 - Agendar (público ou manual), concluir atendimento e pagar comissão passam por API server-side ou
   RPC atômica — a origem (manual/app) e os preços vêm do servidor.
 - Comissão: percentual individual da colaboradora (normal ou *químico*). Colaboradora nunca digita a
-  própria comissão; só a administradora pode sobrescrever ao concluir.
+  própria comissão; só a administradora pode escolher "Valor Fixo" ou sobrescrever ao concluir.
+
+## Mega Hair, valor fixo, vales e fotos do cliente
+
+- **Mega Hair**: no agendamento o cliente só escolhe "Mega Hair" → Aplicação/Manutenção →
+  profissional — nada técnico. Quem fecha o atendimento (admin ou colaboradora) preenche
+  técnica/combinação/comprimento/gramas e os dois valores (técnica e cabelo); a comissão incide
+  **só** sobre o valor da técnica. Histórico visível no atendimento e no cadastro do cliente.
+- **Comissão vs. Valor Fixo**: ao concluir qualquer atendimento, a administradora pode trocar o
+  cálculo por percentual por um valor fixo negociado para aquele atendimento específico.
+- **Vales**: lançados no dia em Comissões → "Descontar Vale", ficam em aberto e são descontados
+  automaticamente (do mais antigo ao mais novo) no próximo pagamento — nunca é preciso reabrir o
+  vale depois. Um vale maior que a comissão disponível nunca é aplicado pela metade: continua
+  inteiro em aberto para o próximo ciclo.
+- **Fotos do cliente**: em Clientes → editar cliente, as seções "Ficha de Anamnese" e
+  "Acompanhamento" tiram foto pela câmera ou fazem upload, pedem um nome e guardam no bucket
+  privado `cliente-fotos` (miniaturas via signed URL; leitura/escrita só para admin/colaboradora).
 
 ## WhatsApp
 

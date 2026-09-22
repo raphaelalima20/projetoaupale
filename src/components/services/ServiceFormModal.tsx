@@ -30,6 +30,7 @@ export default function ServiceFormModal({ open, onClose, onSaved, service }: Se
   const [durationMinutes, setDurationMinutes] = useState("60");
   const [isVariablePrice, setIsVariablePrice] = useState(false);
   const [isChemical, setIsChemical] = useState(false);
+  const [isMega, setIsMega] = useState(false);
   const [packageServices, setPackageServices] = useState("");
   const [packagePeriod, setPackagePeriod] = useState("mensal");
   const [error, setError] = useState("");
@@ -44,6 +45,7 @@ export default function ServiceFormModal({ open, onClose, onSaved, service }: Se
       setDurationMinutes(String(service.duration_minutes ?? 60));
       setIsVariablePrice(service.is_variable_price ?? false);
       setIsChemical(service.is_chemical ?? false);
+      setIsMega(service.is_mega ?? false);
       setPackageServices(service.package_services ?? "");
       setPackagePeriod(service.package_period ?? "mensal");
     } else {
@@ -53,6 +55,7 @@ export default function ServiceFormModal({ open, onClose, onSaved, service }: Se
       setDurationMinutes("60");
       setIsVariablePrice(false);
       setIsChemical(false);
+      setIsMega(false);
       setPackageServices("");
       setPackagePeriod("mensal");
     }
@@ -76,6 +79,7 @@ export default function ServiceFormModal({ open, onClose, onSaved, service }: Se
       price: priceNumber,
       is_variable_price: isVariablePrice,
       is_chemical: typeChoice === "individual" ? isChemical : false,
+      is_mega: typeChoice === "individual" ? isMega : false,
       is_active: true,
     };
 
@@ -194,6 +198,14 @@ export default function ServiceFormModal({ open, onClose, onSaved, service }: Se
                   onChange={setIsChemical}
                   label="Serviço químico"
                   description="Usa a comissão de químico da colaboradora em vez da comissão normal"
+                />
+              </div>
+              <div className="rounded-btn border border-border p-3">
+                <Toggle
+                  checked={isMega}
+                  onChange={setIsMega}
+                  label="Mega Hair"
+                  description="No agendamento o cliente só escolhe Aplicação/Manutenção — a técnica e os valores são preenchidos ao concluir o atendimento"
                 />
               </div>
             </>

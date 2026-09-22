@@ -7,9 +7,11 @@ import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
 import CommissionCard from "@/components/commissions/CommissionCard";
 import CommissionPaymentModal from "@/components/commissions/CommissionPaymentModal";
+import ValeDeductModal from "@/components/commissions/ValeDeductModal";
 import WeekRangeNavigator from "@/components/commissions/WeekRangeNavigator";
 import { useCommissions } from "@/lib/hooks/useCommissions";
 import { useCollaborators } from "@/lib/hooks/useCollaborators";
+import { useVales } from "@/lib/hooks/useVales";
 import { createClient } from "@/lib/supabase/client";
 import { groupByCollaborator } from "@/lib/commissions";
 import { getMonday, addDays } from "@/lib/schedule";
@@ -22,9 +24,11 @@ export default function ComissoesPage() {
   const [supabase] = useState(() => createClient());
   const { collaborators, loading: loadingCollaborators } = useCollaborators();
   const { commissions, loading: loadingCommissions, refetch } = useCommissions();
+  const { vales, refetch: refetchVales } = useVales();
   const [filterMode, setFilterMode] = useState<FilterMode>("pending");
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [payingCollaborator, setPayingCollaborator] = useState<Profile | null>(null);
+  const [deductingValeFor, setDeductingValeFor] = useState<Profile | null>(null);
   const [packageAppointmentIds, setPackageAppointmentIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -56,9 +60,18 @@ export default function ComissoesPage() {
     setWeekStart(addDays(weekStart, direction * 7));
   }
 
+  function outstandingValesFor(collaboratorId: string) {
+    return vales.filter((v) => v.colaboradora_id === collaboratorId && !v.commission_payment_id);
+  }
+
   const pendingForPaying = payingCollaborator
     ? (byCollaborator.get(payingCollaborator.id) ?? []).filter((c) => !c.is_paid)
     : [];
+
+  function handlePaid() {
+    refetch();
+    refetchVales();
+  }
 
   return (
     <div className="animate-fadeIn">
@@ -107,8 +120,10 @@ export default function ComissoesPage() {
                 collaborator={collaborator}
                 displayCommissions={display}
                 pendingCommissions={pending}
+                outstandingVales={outstandingValesFor(collaborator.id)}
                 weekStart={weekStart}
                 onPay={() => setPayingCollaborator(collaborator)}
+                onDeductVale={() => setDeductingValeFor(collaborator)}
                 packageAppointmentIds={packageAppointmentIds}
               />
             );
@@ -120,9 +135,19 @@ export default function ComissoesPage() {
         <CommissionPaymentModal
           open={!!payingCollaborator}
           onClose={() => setPayingCollaborator(null)}
-          onPaid={refetch}
+          onPaid={handlePaid}
           collaborator={payingCollaborator}
           pendingCommissions={pendingForPaying}
+          outstandingVales={outstandingValesFor(payingCollaborator.id)}
+        />
+      )}
+
+      {deductingValeFor && (
+        <ValeDeductModal
+          open={!!deductingValeFor}
+          onClose={() => setDeductingValeFor(null)}
+          onSaved={refetchVales}
+          collaborator={deductingValeFor}
         />
       )}
     </div>

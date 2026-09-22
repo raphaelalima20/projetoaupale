@@ -31,9 +31,12 @@ import { getBlockForDate, isDateFullyBlocked, isHourBlocked } from "@/lib/schedu
 import { findActivePackagesForPhone, packageSessionsRemaining } from "@/lib/packages";
 import { formatServicePriceText } from "@/lib/services";
 import { formatDate, cn } from "@/lib/utils";
-import type { ActivePackage } from "@/lib/types/database";
+import { MEGA_TIPO_OPTIONS, megaTipoLabel } from "@/lib/mega";
+import type { ActivePackage, MegaTipo } from "@/lib/types/database";
 
-const TOTAL_STEPS = 6;
+// 1 dados · 2 serviço · 3 tipo do mega (só quando o serviço é Mega Hair) · 4 profissional ·
+// 5 data · 6 horário · 7 confirmar · 8 sucesso (fora do indicador, como o antigo passo de sucesso).
+const TOTAL_STEPS = 7;
 
 export default function AgendarPage() {
   const router = useRouter();
@@ -50,6 +53,7 @@ export default function AgendarPage() {
   const [clientName, setClientName] = useState("");
   const [phone, setPhone] = useState("");
   const [serviceId, setServiceId] = useState<string | null>(null);
+  const [megaTipo, setMegaTipo] = useState<MegaTipo | null>(null);
   const [collaboratorId, setCollaboratorId] = useState<string | null>(null);
   const [dateISO, setDateISO] = useState<string | null>(null);
   const [time, setTime] = useState<string | null>(null);
@@ -64,6 +68,10 @@ export default function AgendarPage() {
 
   const availableDays = nextBusinessDays(18);
   const selectedService = services.find((s) => s.id === serviceId) ?? null;
+
+  useEffect(() => {
+    setMegaTipo(null);
+  }, [serviceId]);
   const selectedPackage = activePackages.find((p) => p.id === selectedPackageId) ?? null;
   const selectedCollaborator = collaborators.find((c) => c.id === collaboratorId) ?? null;
   const today = new Date();
@@ -85,7 +93,7 @@ export default function AgendarPage() {
   }, [phone, supabase]);
 
   useEffect(() => {
-    if (step !== 5 || !collaboratorId || !dateISO) return;
+    if (step !== 6 || !collaboratorId || !dateISO) return;
     let active = true;
     setLoadingOccupied(true);
     supabase
@@ -112,8 +120,14 @@ export default function AgendarPage() {
       router.push("/cliente");
       return;
     }
-    if (step === 3 && selectedPackage) {
-      setStep(1);
+    // Passo 4 (profissional) é o único com mais de uma origem possível: pacote pula direto de 1,
+    // Mega Hair vem do passo 3 (tipo), os demais serviços vêm do passo 2.
+    if (step === 4) {
+      if (selectedPackage) {
+        setStep(1);
+      } else {
+        setStep(selectedService?.is_mega ? 3 : 2);
+      }
       return;
     }
     setStep((s) => s - 1);
@@ -130,7 +144,7 @@ export default function AgendarPage() {
       setError("Informe um telefone válido.");
       return;
     }
-    setStep(selectedPackage ? 3 : 2);
+    setStep(selectedPackage ? 4 : 2);
   }
 
   async function handleConfirm() {
@@ -151,13 +165,14 @@ export default function AgendarPage() {
       collaborator: selectedCollaborator,
       dateISO,
       time,
+      megaTipo: selectedPackage ? null : megaTipo,
     });
     setSubmitting(false);
     if (insertError) {
       setError(insertError.message);
       return;
     }
-    setStep(7);
+    setStep(8);
   }
 
   return (
@@ -249,14 +264,42 @@ export default function AgendarPage() {
               variant="cards"
               onChange={(id) => {
                 setServiceId(id);
-                setStep(3);
+                const service = services.find((s) => s.id === id);
+                setStep(service?.is_mega ? 3 : 4);
               }}
             />
           )}
         </Card>
       )}
 
-      {step === 3 && (
+      {step === 3 && selectedService?.is_mega && (
+        <Card>
+          <h1 className="mb-1 font-display text-xl text-text">{selectedService.name}</h1>
+          <p className="mb-6 text-sm text-textDim">É aplicação ou manutenção?</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {MEGA_TIPO_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => {
+                  setMegaTipo(o.value);
+                  setStep(4);
+                }}
+                className={cn(
+                  "rounded-btn border px-4 py-6 text-center text-sm font-medium transition duration-200",
+                  megaTipo === o.value
+                    ? "border-gold bg-gold-dim text-gold-light"
+                    : "border-border text-text hover:border-gold/50"
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {step === 4 && (
         <Card>
           <h1 className="mb-1 font-display text-xl text-text">Escolha a profissional</h1>
           <p className="mb-6 text-sm text-textDim">Quem vai te atender</p>
@@ -272,14 +315,14 @@ export default function AgendarPage() {
               variant="cards"
               onChange={(id) => {
                 setCollaboratorId(id);
-                setStep(4);
+                setStep(5);
               }}
             />
           )}
         </Card>
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <Card>
           <h1 className="mb-1 font-display text-xl text-text">Escolha a data</h1>
           <p className="mb-6 text-sm text-textDim">Segunda a sábado</p>
@@ -301,7 +344,7 @@ export default function AgendarPage() {
                   disabled={blocked}
                   onClick={() => {
                     setDateISO(iso);
-                    setStep(5);
+                    setStep(6);
                   }}
                   className={cn(
                     "flex flex-col items-center gap-0.5 rounded-btn border px-2 py-3 transition duration-200",
@@ -327,7 +370,7 @@ export default function AgendarPage() {
         </Card>
       )}
 
-      {step === 5 && dateISO && (
+      {step === 6 && dateISO && (
         <Card>
           <h1 className="mb-1 font-display text-xl text-text">Escolha o horário</h1>
           <p className="mb-6 text-sm text-textDim">{formatDate(parseISODate(dateISO))}</p>
@@ -354,7 +397,7 @@ export default function AgendarPage() {
                     disabled={occupied}
                     onClick={() => {
                       setTime(label);
-                      setStep(6);
+                      setStep(7);
                     }}
                     className={cn(
                       "rounded-btn border px-2 py-3 text-sm font-medium transition duration-200",
@@ -372,12 +415,13 @@ export default function AgendarPage() {
         </Card>
       )}
 
-      {step === 6 && (selectedService || selectedPackage) && selectedCollaborator && dateISO && time && (
+      {step === 7 && (selectedService || selectedPackage) && selectedCollaborator && dateISO && time && (
         <Card>
           <h1 className="mb-1 font-display text-xl text-text">Confirme seu agendamento</h1>
           <p className="mb-6 text-sm text-textDim">Revise os detalhes antes de confirmar</p>
           <div className="flex flex-col gap-3 rounded-btn bg-surface2 p-4 text-sm">
             <SummaryRow label="Serviço" value={selectedPackage ? selectedPackage.package_name : selectedService!.name} />
+            {megaTipo && <SummaryRow label="Tipo" value={megaTipoLabel(megaTipo)} />}
             <SummaryRow label="Profissional" value={selectedCollaborator.full_name} />
             <SummaryRow label="Data" value={formatDate(parseISODate(dateISO))} />
             <SummaryRow label="Horário" value={time} />
@@ -401,7 +445,7 @@ export default function AgendarPage() {
         </Card>
       )}
 
-      {step === 7 && (selectedService || selectedPackage) && selectedCollaborator && dateISO && time && (
+      {step === 8 && (selectedService || selectedPackage) && selectedCollaborator && dateISO && time && (
         <Card className="flex flex-col items-center gap-4 py-10 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
             <CheckCircle2 size={32} className="text-success" />
@@ -412,6 +456,7 @@ export default function AgendarPage() {
           </div>
           <div className="flex w-full flex-col gap-3 rounded-btn bg-surface2 p-4 text-left text-sm">
             <SummaryRow label="Serviço" value={selectedPackage ? selectedPackage.package_name : selectedService!.name} />
+            {megaTipo && <SummaryRow label="Tipo" value={megaTipoLabel(megaTipo)} />}
             <SummaryRow label="Profissional" value={selectedCollaborator.full_name} />
             <SummaryRow label="Data" value={formatDate(parseISODate(dateISO))} />
             <SummaryRow label="Horário" value={time} />

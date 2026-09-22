@@ -41,12 +41,15 @@ export default function PaymentHistoryItem({
         <span className="font-display text-lg text-gold-light">
           {formatCurrency(payment.total_amount)}
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           {method && <Badge tone="neutral">{method.label}</Badge>}
           {showCashBadge && (
             <Badge tone={payment.affect_cash ? "success" : "neutral"}>
               {payment.affect_cash ? "No caixa" : "Fora do caixa"}
             </Badge>
+          )}
+          {payment.vale_amount > 0 && (
+            <Badge tone="orange">- {formatCurrency(payment.vale_amount)} vale</Badge>
           )}
         </div>
       </div>

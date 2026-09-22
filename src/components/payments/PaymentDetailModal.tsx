@@ -5,11 +5,12 @@ import { StickyNote } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import CollaboratorAvatar from "@/components/ui/CollaboratorAvatar";
 import CommissionDetailList from "@/components/commissions/CommissionDetailList";
+import ValeHistoryList from "@/components/commissions/ValeHistoryList";
 import { createClient } from "@/lib/supabase/client";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { parseISODate } from "@/lib/schedule";
-import type { Commission, CommissionPayment, Profile } from "@/lib/types/database";
+import type { Commission, CommissionPayment, Profile, Vale } from "@/lib/types/database";
 
 interface PaymentDetailModalProps {
   open: boolean;
@@ -30,6 +31,7 @@ export default function PaymentDetailModal({
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [paidByProfile, setPaidByProfile] = useState<Profile | null>(null);
   const [packageAppointmentIds, setPackageAppointmentIds] = useState<Set<string>>(new Set());
+  const [consumedVales, setConsumedVales] = useState<Vale[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -69,6 +71,16 @@ export default function PaymentDetailModal({
         .maybeSingle()
         .then(({ data }) => setPaidByProfile((data as Profile) ?? null));
     }
+
+    if (payment.vale_amount > 0) {
+      supabase
+        .from("vales")
+        .select("*")
+        .eq("commission_payment_id", payment.id)
+        .then(({ data }) => setConsumedVales((data as Vale[]) ?? []));
+    } else {
+      setConsumedVales([]);
+    }
   }, [open, payment, supabase, showAdminFields]);
 
   if (!payment) return null;
@@ -107,12 +119,25 @@ export default function PaymentDetailModal({
             <Row label="Pago por" value={paidByProfile.full_name} />
           )}
           <div className="my-1 border-t border-border" />
-          <div className="flex items-center justify-between">
-            <span className="text-textDim">Valor total</span>
-            <span className="font-display text-xl text-gold-light">
-              {formatCurrency(payment.total_amount)}
-            </span>
-          </div>
+          {payment.vale_amount > 0 ? (
+            <>
+              <Row label="Comissão bruta" value={formatCurrency(payment.original_amount ?? payment.total_amount)} />
+              <Row label="Vale descontado" value={`- ${formatCurrency(payment.vale_amount)}`} />
+              <div className="flex items-center justify-between">
+                <span className="text-textDim">Valor líquido pago</span>
+                <span className="font-display text-xl text-gold-light">
+                  {formatCurrency(payment.total_amount)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className="text-textDim">Valor total</span>
+              <span className="font-display text-xl text-gold-light">
+                {formatCurrency(payment.total_amount)}
+              </span>
+            </div>
+          )}
         </div>
 
         {payment.notes && (
@@ -121,6 +146,8 @@ export default function PaymentDetailModal({
             {payment.notes}
           </div>
         )}
+
+        {consumedVales.length > 0 && <ValeHistoryList vales={consumedVales} title="Vales descontados neste pagamento" />}
 
         <div>
           <p className="mb-2 text-sm text-textDim">Atendimentos pagos neste lote</p>

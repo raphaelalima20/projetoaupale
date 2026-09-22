@@ -92,6 +92,10 @@ interface CommissionPaymentRow {
   date: string;
   collaboratorName: string;
   servicesCount: number;
+  /** Comissão bruta, antes do desconto de vale. */
+  originalAmount: number;
+  valeAmount: number;
+  /** Valor líquido efetivamente pago. */
   amount: number;
   paymentMethodLabel: string;
 }
@@ -101,6 +105,7 @@ interface CommissionPaymentsReportInput {
   collaboratorLabel: string;
   rows: CommissionPaymentRow[];
   totalAmount: number;
+  totalVale: number;
   generatedAt: Date;
 }
 
@@ -119,15 +124,17 @@ export function generateCommissionPaymentsReportPdf(input: CommissionPaymentsRep
 
   autoTable(doc, {
     startY: y,
-    head: [["Data", "Colaboradora", "Atendimentos", "Valor", "Forma Pgto"]],
+    head: [["Data", "Colaboradora", "Atendimentos", "Bruto", "Vale", "Líquido", "Forma Pgto"]],
     body: input.rows.map((r) => [
       r.date,
       r.collaboratorName,
       String(r.servicesCount),
+      formatCurrency(r.originalAmount),
+      r.valeAmount > 0 ? `- ${formatCurrency(r.valeAmount)}` : "—",
       formatCurrency(r.amount),
       r.paymentMethodLabel,
     ]),
-    foot: [["", "", "", formatCurrency(input.totalAmount), "Total"]],
+    foot: [["", "", "", "", formatCurrency(input.totalVale), formatCurrency(input.totalAmount), "Total"]],
     theme: "grid",
     styles: { fontSize: 9 },
     headStyles: { fillColor: [74, 55, 40] },

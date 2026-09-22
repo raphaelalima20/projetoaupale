@@ -73,7 +73,13 @@ export async function POST(request: Request) {
   if (!collaborator) return fail("Profissional inválida.");
 
   // ---- Service or package session -----------------------------------------------------------
-  let serviceRow: { id: string; name: string; price: number; is_variable_price: boolean } | null = null;
+  let serviceRow: {
+    id: string;
+    name: string;
+    price: number;
+    is_variable_price: boolean;
+    is_mega: boolean;
+  } | null = null;
   let packageRow: { id: string; package_name: string } | null = null;
 
   if (body.packageId) {
@@ -98,11 +104,18 @@ export async function POST(request: Request) {
   } else {
     const { data: service } = await admin
       .from("services")
-      .select("id, name, price, is_variable_price, is_active")
+      .select("id, name, price, is_variable_price, is_active, is_mega")
       .eq("id", String(body.serviceId ?? ""))
       .maybeSingle();
     if (!service || !service.is_active) return fail("Serviço inválido.");
     serviceRow = service;
+  }
+
+  // ---- Mega Hair: at booking, only "Aplicação" or "Manutenção" — nothing technical -----------
+  let megaTipo: "aplicacao" | "manutencao" | null = null;
+  if (serviceRow?.is_mega) {
+    megaTipo = body.megaTipo === "aplicacao" || body.megaTipo === "manutencao" ? body.megaTipo : null;
+    if (!megaTipo) return fail("Selecione Aplicação ou Manutenção.");
   }
 
   // ---- Availability ---------------------------------------------------------------------------
@@ -151,6 +164,7 @@ export async function POST(request: Request) {
       appointment_date: dateISO,
       appointment_time: time,
       status: "agendado",
+      mega_tipo: megaTipo,
       origin: isStaff ? "manual" : "app",
       notes: isStaff ? String(body.notes ?? "").trim().slice(0, 500) || null : null,
       created_by: isStaff ? caller.userId : null,

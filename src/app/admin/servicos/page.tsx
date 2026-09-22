@@ -136,6 +136,7 @@ export default function ServicosPage() {
                         className="text-sm font-medium text-text"
                       />
                       {service.is_chemical && <Badge tone="info">Químico</Badge>}
+                      {service.is_mega && <Badge tone="pink">Mega Hair</Badge>}
                       {!service.is_active && <Badge tone="danger">Inativo</Badge>}
                       <button
                         onClick={() => openEdit(service)}

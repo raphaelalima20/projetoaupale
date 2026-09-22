@@ -43,6 +43,7 @@ export default function CommissionDetailList({
           ) : (
             sorted.map((c) => {
               const isPackage = !!c.appointment_id && packageAppointmentIds?.has(c.appointment_id);
+              const isFixed = c.tipo_remuneracao === "valor_fixo";
               return (
                 <div
                   key={c.id}
@@ -53,12 +54,15 @@ export default function CommissionDetailList({
                     <p className="truncate text-text">
                       {c.client_name} · {c.service_name}
                     </p>
-                    {isPackage && (
-                      <Badge tone="info" className="mt-1 gap-1">
-                        <Package size={10} />
-                        Pacote
-                      </Badge>
-                    )}
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {isPackage && (
+                        <Badge tone="info" className="gap-1">
+                          <Package size={10} />
+                          Pacote
+                        </Badge>
+                      )}
+                      {isFixed && <Badge tone="pink">Fixo</Badge>}
+                    </div>
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-textDim">{formatCurrency(c.service_value)}</p>

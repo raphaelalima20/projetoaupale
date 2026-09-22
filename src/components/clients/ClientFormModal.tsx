@@ -9,6 +9,8 @@ import Button from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { toISODate } from "@/lib/schedule";
+import ClientPhotoSection from "./ClientPhotoSection";
+import ClientMegaHistory from "./ClientMegaHistory";
 import type { Client } from "@/lib/types/database";
 
 interface ClientFormModalProps {
@@ -112,6 +114,24 @@ export default function ClientFormModal({ open, onClose, onSaved, client }: Clie
           Salvar
         </Button>
       </form>
+
+      {client && (
+        <div className="mt-6 flex flex-col gap-4 border-t border-border pt-6">
+          <ClientMegaHistory clientId={client.id} />
+          <ClientPhotoSection
+            clientId={client.id}
+            tipo="anamnese"
+            title="Ficha de Anamnese"
+            description="Fotografe ou envie a ficha assinada antes do procedimento"
+          />
+          <ClientPhotoSection
+            clientId={client.id}
+            tipo="acompanhamento"
+            title="Acompanhamento"
+            description="Fotos de antes/depois e evolução do cabelo"
+          />
+        </div>
+      )}
     </Modal>
   );
 }

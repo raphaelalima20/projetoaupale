@@ -110,10 +110,13 @@ export default function RelatoriosPagamentosPage() {
       periodLabel: PERIOD_LABELS[preset],
       collaboratorLabel,
       totalAmount,
+      totalVale: payments.reduce((sum, p) => sum + (p.vale_amount || 0), 0),
       rows: payments.map((p) => ({
         date: formatDate(new Date(p.paid_at)),
         collaboratorName: p.collaborator_name,
         servicesCount: p.services_count,
+        originalAmount: p.original_amount ?? p.total_amount,
+        valeAmount: p.vale_amount || 0,
         amount: p.total_amount,
         paymentMethodLabel:
           PAYMENT_METHODS.find((m) => m.value === p.payment_method)?.label ?? p.payment_method,

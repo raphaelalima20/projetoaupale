@@ -17,7 +17,8 @@ import { isBusinessDay, isPastDay, parseISODate, toISODate, hourFromTime } from 
 import { getBlockForDate, isHourBlocked } from "@/lib/scheduleBlocks";
 import { findActivePackagesForPhone, packageSessionsRemaining } from "@/lib/packages";
 import { formatCurrency } from "@/lib/utils";
-import type { Profile, Service, ScheduleBlock, ActivePackage } from "@/lib/types/database";
+import { MEGA_TIPO_OPTIONS } from "@/lib/mega";
+import type { MegaTipo, Profile, Service, ScheduleBlock, ActivePackage } from "@/lib/types/database";
 
 interface AppointmentModalProps {
   open: boolean;
@@ -53,6 +54,7 @@ export default function AppointmentModal({
   const [phone, setPhone] = useState("");
   const [serviceId, setServiceId] = useState<string | null>(null);
   const [priceOverride, setPriceOverride] = useState("");
+  const [megaTipo, setMegaTipo] = useState<MegaTipo | "">("");
   const [collaboratorId, setCollaboratorId] = useState<string | null>(null);
   const [dateISO, setDateISO] = useState("");
   const [time, setTime] = useState("");
@@ -70,6 +72,7 @@ export default function AppointmentModal({
     setPhone("");
     setServiceId(null);
     setPriceOverride("");
+    setMegaTipo("");
     setCollaboratorId(defaultCollaboratorId ?? null);
     setDateISO(toISODate(defaultDate ?? new Date()));
     setTime(defaultHour !== undefined ? `${String(defaultHour).padStart(2, "0")}:00` : "");
@@ -104,6 +107,7 @@ export default function AppointmentModal({
     } else {
       setPriceOverride("");
     }
+    setMegaTipo("");
   }, [selectedService]);
 
   const selectedCollaborator = collaborators.find((c) => c.id === collaboratorId);
@@ -127,6 +131,8 @@ export default function AppointmentModal({
       return setError("Selecione um serviço.");
     } else if (selectedService?.is_variable_price && Number(priceOverride) <= 0) {
       return setError("Informe o valor do serviço.");
+    } else if (selectedService?.is_mega && !megaTipo) {
+      return setError("Selecione Aplicação ou Manutenção.");
     }
     if (!collaboratorId) return setError("Selecione uma profissional.");
     if (!dateISO) return setError("Selecione uma data.");
@@ -169,6 +175,7 @@ export default function AppointmentModal({
       dateISO,
       time,
       notes,
+      megaTipo: !usePackage && selectedService?.is_mega ? (megaTipo as MegaTipo) : null,
     });
 
     if (insertError) {
@@ -252,6 +259,23 @@ export default function AppointmentModal({
                   Valor base: {formatCurrency(selectedService.price)} — ajuste conforme necessário
                 </p>
               </div>
+            )}
+            {selectedService?.is_mega && (
+              <Select
+                label="Tipo"
+                value={megaTipo}
+                onChange={(e) => setMegaTipo(e.target.value as MegaTipo)}
+                required
+              >
+                <option value="" disabled>
+                  Selecione
+                </option>
+                {MEGA_TIPO_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
             )}
           </>
         )}

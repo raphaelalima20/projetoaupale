@@ -6,6 +6,21 @@ export type TransactionType = "entrada" | "saida";
 export type ServiceType = "individual" | "pacote";
 export type CashStatus = "aberto" | "fechado";
 export type ScheduleBlockType = "full_day" | "morning" | "afternoon";
+export type MegaTipo = "aplicacao" | "manutencao";
+export type MegaTecnica = "fita" | "tela" | "queratina";
+export type RemunerationType = "comissao" | "valor_fixo";
+export type ClientPhotoType = "anamnese" | "acompanhamento";
+
+/** As 6 combinações fixas oferecidas no fechamento do Mega Hair. */
+export const MEGA_COMBINACOES = [
+  "Tela + Mesclado",
+  "Fita + Mesclado",
+  "Queratina + Mesclado",
+  "Mesclado + Luzes",
+  "Cabelo Natural (Fita)",
+  "Cabelo Natural (Tela)",
+] as const;
+export type MegaCombinacao = (typeof MEGA_COMBINACOES)[number];
 
 export interface SalonSettings {
   id: string;
@@ -89,6 +104,8 @@ export interface Service {
   commission_value: number;
   commission_is_percentage: boolean;
   is_chemical: boolean;
+  /** Mega Hair: no agendamento o cliente só escolhe Aplicação/Manutenção — nada técnico. */
+  is_mega: boolean;
   is_variable_price: boolean;
   package_services: string | null;
   package_period: string | null;
@@ -127,8 +144,51 @@ export interface Appointment {
   payment_method_2: PaymentMethod | null;
   payment_amount_1: number | null;
   payment_amount_2: number | null;
+  /** Escolhido no agendamento (sem nada técnico); editável no fechamento do Mega Hair. */
+  mega_tipo: MegaTipo | null;
+  /** Funcionalidade 2 — comissão por percentual (padrão) ou valor fixo negociado. */
+  tipo_remuneracao: RemunerationType;
+  valor_fixo: number | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Preenchida pela admin/colaboradora somente no fechamento do atendimento de Mega Hair. */
+export interface MegaEspecificacao {
+  id: string;
+  agendamento_id: string;
+  tecnica: MegaTecnica;
+  tipo: MegaTipo;
+  combinacao: MegaCombinacao | string;
+  comprimento: string | null;
+  gramas: number | null;
+  /** Base da comissão da colaboradora — o valor do cabelo NUNCA entra nessa conta. */
+  valor_tecnica: number;
+  valor_cabelo: number;
+  created_at: string;
+}
+
+export interface Vale {
+  id: string;
+  colaboradora_id: string;
+  valor: number;
+  descricao: string | null;
+  data: string;
+  /** null = ainda em aberto; preenchido quando um pagamento de comissão o consome. */
+  commission_payment_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ClienteFoto {
+  id: string;
+  cliente_id: string;
+  tipo: ClientPhotoType;
+  nome: string;
+  url: string;
+  storage_path: string;
+  uploaded_by: string | null;
+  created_at: string;
 }
 
 export interface CashRegister {
@@ -177,6 +237,8 @@ export interface Commission {
   commission_date: string;
   is_paid: boolean;
   payment_id: string | null;
+  tipo_remuneracao: RemunerationType;
+  valor_fixo: number | null;
   created_at: string;
 }
 

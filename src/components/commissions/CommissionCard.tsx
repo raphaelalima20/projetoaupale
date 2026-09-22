@@ -1,21 +1,24 @@
-import { Banknote } from "lucide-react";
+import { Banknote, Receipt } from "lucide-react";
 import CollaboratorAvatar from "@/components/ui/CollaboratorAvatar";
 import SpecialtyText from "@/components/collaborators/SpecialtyText";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import WeekdayBreakdownGrid from "./WeekdayBreakdownGrid";
 import CommissionDetailList from "./CommissionDetailList";
+import ValeHistoryList from "./ValeHistoryList";
 import { computeWeekdayBreakdown, computeTotals, computePendingPeriod } from "@/lib/commissions";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { parseISODate } from "@/lib/schedule";
-import type { Profile, Commission } from "@/lib/types/database";
+import type { Profile, Commission, Vale } from "@/lib/types/database";
 
 interface CommissionCardProps {
   collaborator: Profile;
   displayCommissions: Commission[];
   pendingCommissions: Commission[];
+  outstandingVales: Vale[];
   weekStart: Date;
   onPay: () => void;
+  onDeductVale: () => void;
   packageAppointmentIds?: Set<string>;
 }
 
@@ -23,13 +26,17 @@ export default function CommissionCard({
   collaborator,
   displayCommissions,
   pendingCommissions,
+  outstandingVales,
   weekStart,
   onPay,
+  onDeductVale,
   packageAppointmentIds,
 }: CommissionCardProps) {
   const totals = computeTotals(displayCommissions);
   const breakdown = computeWeekdayBreakdown(displayCommissions, weekStart);
   const period = computePendingPeriod(pendingCommissions);
+  const valeTotal = outstandingVales.reduce((sum, v) => sum + v.valor, 0);
+  const netTotal = Math.max(0, totals.totalCommission - valeTotal);
 
   return (
     <Card
@@ -59,7 +66,7 @@ export default function CommissionCard({
         </div>
         <div className="text-right">
           <p className="font-display text-2xl text-gold-light">
-            {formatCurrency(totals.totalCommission)}
+            {formatCurrency(valeTotal > 0 ? netTotal : totals.totalCommission)}
           </p>
           <p className="text-xs text-textDim">de {formatCurrency(totals.totalService)} em serviços</p>
         </div>
@@ -69,11 +76,34 @@ export default function CommissionCard({
         <WeekdayBreakdownGrid days={breakdown} />
       </div>
 
-      {pendingCommissions.length > 0 && (
-        <Button onClick={onPay} className="mt-4 w-full">
-          <Banknote size={16} />
-          Pagar Colaboradora
+      {valeTotal > 0 && (
+        <div className="mt-4 flex flex-col gap-1.5 rounded-btn bg-surface2 p-3 text-xs">
+          <Row label="Comissão bruta" value={formatCurrency(totals.totalCommission)} />
+          <Row label="Vales descontados" value={`- ${formatCurrency(valeTotal)}`} />
+          <div className="flex items-center justify-between border-t border-border pt-1.5 font-medium text-text">
+            <span>Comissão líquida</span>
+            <span>{formatCurrency(netTotal)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        {pendingCommissions.length > 0 && (
+          <Button onClick={onPay} className="flex-1">
+            <Banknote size={16} />
+            Pagar Colaboradora
+          </Button>
+        )}
+        <Button onClick={onDeductVale} variant="secondary" className="flex-1">
+          <Receipt size={16} />
+          Descontar Vale
         </Button>
+      </div>
+
+      {outstandingVales.length > 0 && (
+        <div className="mt-4 border-t border-border pt-3">
+          <ValeHistoryList vales={outstandingVales} />
+        </div>
       )}
 
       <div className="mt-4 border-t border-border pt-3">
@@ -83,5 +113,14 @@ export default function CommissionCard({
         />
       </div>
     </Card>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-textDim">
+      <span>{label}</span>
+      <span className="text-text">{value}</span>
+    </div>
   );
 }
