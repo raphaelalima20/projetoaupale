@@ -1,11 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Save, Copy, Check, UserPlus, Send, Plus, X } from "lucide-react";
+import { Save, Copy, Check, UserPlus, Send, Plus, X, Trash2 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import PhoneInput from "@/components/ui/PhoneInput";
+import CpfInput from "@/components/ui/CpfInput";
 import Button from "@/components/ui/Button";
 import Toggle from "@/components/ui/Toggle";
 import ImageUpload from "@/components/products/ImageUpload";
@@ -78,6 +79,9 @@ export default function CollaboratorFormModal({
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const isSelf = !!collaborator && collaborator.id === currentProfile?.id;
 
@@ -86,11 +90,14 @@ export default function CollaboratorFormModal({
     setInviteLink(null);
     setCopied(false);
     setError("");
+    setConfirmingDelete(false);
+    setDeleting(false);
+    setDeleteError("");
     if (collaborator) {
       setFullName(collaborator.full_name);
       setEmail(collaborator.email ?? "");
       setPhone((collaborator.phone ?? "").replace(/\D/g, ""));
-      setCpf(collaborator.cpf ?? "");
+      setCpf((collaborator.cpf ?? "").replace(/\D/g, ""));
       setAddress(collaborator.address ?? "");
       setSpecialtyRows(rowsFromSpecialty(collaborator.specialty));
       setPhotoFile(null);
@@ -255,6 +262,22 @@ export default function CollaboratorFormModal({
     onClose();
   }
 
+  async function handleDelete() {
+    if (!collaborator) return;
+    setDeleting(true);
+    setDeleteError("");
+    const res = await fetch(`/api/collaborators/${collaborator.id}`, { method: "DELETE" });
+    const body = await res.json().catch(() => ({}));
+    setDeleting(false);
+    if (!res.ok) {
+      setDeleteError(body.error ?? "Não foi possível excluir a colaboradora.");
+      return;
+    }
+    showToast("Colaboradora excluída");
+    onSaved();
+    onClose();
+  }
+
   async function copyLink() {
     if (!inviteLink) return;
     await navigator.clipboard.writeText(inviteLink);
@@ -394,12 +417,7 @@ export default function CollaboratorFormModal({
           disabled={!!collaborator}
         />
         <PhoneInput value={phone} onChange={setPhone} />
-        <Input
-          label="CPF"
-          value={cpf}
-          onChange={(e) => setCpf(e.target.value)}
-          placeholder="000.000.000-00"
-        />
+        <CpfInput value={cpf} onChange={setCpf} />
         <Input label="Endereço" value={address} onChange={(e) => setAddress(e.target.value)} />
 
         <div className="flex flex-col gap-1.5">
@@ -499,6 +517,53 @@ export default function CollaboratorFormModal({
           >
             {collaborator.is_active ? "Desativar colaboradora" : "Reativar colaboradora"}
           </Button>
+        )}
+
+        {collaborator && !isSelf && (
+          <div className="border-t border-border pt-4">
+            {confirmingDelete ? (
+              <div className="flex flex-col gap-3 rounded-btn border border-danger/30 bg-danger/10 p-3">
+                <p className="text-sm text-danger">
+                  Tem certeza que deseja excluir esta colaboradora? Esta ação não pode ser desfeita.
+                </p>
+                {deleteError && <p className="text-xs text-danger">{deleteError}</p>}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={deleting}
+                    className="flex-1"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={handleDelete}
+                    loading={deleting}
+                    className="flex-1"
+                  >
+                    Confirmar exclusão
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => {
+                  setDeleteError("");
+                  setConfirmingDelete(true);
+                }}
+                disabled={loading}
+                className="w-full"
+              >
+                <Trash2 size={16} />
+                Excluir colaboradora
+              </Button>
+            )}
+          </div>
         )}
       </form>
     </Modal>

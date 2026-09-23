@@ -6,7 +6,14 @@ import { Copy, Check } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/utils";
 
-export default function PixQRCode({ payload, amount }: { payload: string; amount: number }) {
+interface PixQRCodeProps {
+  payload: string;
+  amount: number;
+  /** Static QR image uploaded by the admin in Configurações — shown instead of the generated one when set. */
+  qrImageUrl?: string | null;
+}
+
+export default function PixQRCode({ payload, amount, qrImageUrl }: PixQRCodeProps) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -19,7 +26,11 @@ export default function PixQRCode({ payload, amount }: { payload: string; amount
     <div className="flex flex-col items-center gap-4">
       <p className="font-display text-2xl text-gold-light">{formatCurrency(amount)}</p>
       <div className="rounded-card bg-white p-4">
-        <QRCodeSVG value={payload} size={200} />
+        {qrImageUrl ? (
+          <img src={qrImageUrl} alt="QR Code Pix" className="h-[200px] w-[200px] object-contain" />
+        ) : (
+          <QRCodeSVG value={payload} size={200} />
+        )}
       </div>
       <Button variant="secondary" onClick={handleCopy} className="w-full">
         {copied ? <Check size={16} /> : <Copy size={16} />}

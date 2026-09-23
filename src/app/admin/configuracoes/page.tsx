@@ -46,6 +46,8 @@ export default function ConfiguracoesPage() {
   const [pixKey, setPixKey] = useState("");
   const [pixKeyType, setPixKeyType] = useState("cpf");
   const [pixBeneficiary, setPixBeneficiary] = useState("");
+  const [pixQrFile, setPixQrFile] = useState<File | null>(null);
+  const [pixQrPreview, setPixQrPreview] = useState<string | null>(null);
   const [city, setCity] = useState("SAO PAULO");
   const [mpEnabled, setMpEnabled] = useState(false);
   const [mpToken, setMpToken] = useState("");
@@ -73,6 +75,7 @@ export default function ConfiguracoesPage() {
         setPixKey(row.pix_key ?? "");
         setPixKeyType(row.pix_key_type ?? "cpf");
         setPixBeneficiary(row.pix_beneficiary ?? "");
+        setPixQrPreview(row.pix_qrcode_url ?? null);
         setCity(row.city ?? "SAO PAULO");
         setMpEnabled(row.mercado_pago_enabled ?? false);
         setMpToken(row.mercado_pago_token ?? "");
@@ -93,6 +96,16 @@ export default function ConfiguracoesPage() {
     setLogoPreview(null);
   }
 
+  function handleSelectPixQr(file: File) {
+    setPixQrFile(file);
+    setPixQrPreview(URL.createObjectURL(file));
+  }
+
+  function handleRemovePixQr() {
+    setPixQrFile(null);
+    setPixQrPreview(null);
+  }
+
   async function handleSave() {
     setSaving(true);
 
@@ -102,6 +115,20 @@ export default function ConfiguracoesPage() {
         logoUrl = await uploadImage(supabase, "salon", logoFile, "logo");
       } catch (uploadErr) {
         showToast(uploadErr instanceof Error ? uploadErr.message : "Falha ao enviar a logo.", "error");
+        setSaving(false);
+        return;
+      }
+    }
+
+    let pixQrUrl = pixQrPreview === null ? null : settings?.pix_qrcode_url ?? null;
+    if (pixQrFile) {
+      try {
+        pixQrUrl = await uploadImage(supabase, "salon", pixQrFile, "pix-qrcode");
+      } catch (uploadErr) {
+        showToast(
+          uploadErr instanceof Error ? uploadErr.message : "Falha ao enviar o QR Code.",
+          "error"
+        );
         setSaving(false);
         return;
       }
@@ -118,6 +145,7 @@ export default function ConfiguracoesPage() {
       pix_key: pixKey.trim() || null,
       pix_key_type: pixKey.trim() ? pixKeyType : null,
       pix_beneficiary: pixBeneficiary.trim() || null,
+      pix_qrcode_url: pixQrUrl,
       city: city.trim() || "SAO PAULO",
       mercado_pago_enabled: mpEnabled,
       mercado_pago_token: mpToken.trim() || null,
@@ -134,6 +162,7 @@ export default function ConfiguracoesPage() {
       return;
     }
     setLogoFile(null);
+    setPixQrFile(null);
     showToast("Configurações salvas");
   }
 
@@ -254,6 +283,18 @@ export default function ConfiguracoesPage() {
               onChange={(e) => setCity(e.target.value)}
               placeholder="SAO PAULO"
             />
+            <ImageUpload
+              label="QR Code Pix"
+              alt="QR Code Pix"
+              previewUrl={pixQrPreview}
+              onSelect={handleSelectPixQr}
+              onRemove={handleRemovePixQr}
+              size={160}
+            />
+            <p className="-mt-2 text-xs text-textDim">
+              Enviado como imagem (jpg, png ou webp). É exibido ao cliente no lugar do QR Code
+              gerado automaticamente quando ele escolhe pagar por Pix.
+            </p>
           </div>
         </Card>
 

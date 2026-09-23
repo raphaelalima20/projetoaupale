@@ -35,6 +35,7 @@ export interface SalonSettings {
   pix_key: string | null;
   pix_key_type: string | null;
   pix_beneficiary: string | null;
+  pix_qrcode_url: string | null;
   mercado_pago_token: string | null;
   mercado_pago_enabled: boolean;
   /** Public Mercado Pago payment link shown to customers who pay by card. */
@@ -59,6 +60,7 @@ export type SalonPublicSettings = Pick<
   | "pix_key"
   | "pix_key_type"
   | "pix_beneficiary"
+  | "pix_qrcode_url"
   | "mercado_pago_enabled"
   | "mercado_pago_link"
   | "logo_url"

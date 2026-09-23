@@ -142,12 +142,20 @@ export default function CarrinhoPage() {
 
           <div>
             <p className="mb-2 text-sm text-textDim">Forma de pagamento</p>
-            <PaymentMethodSelect value={paymentMethod} onChange={setPaymentMethod} />
+            <PaymentMethodSelect
+              value={paymentMethod}
+              onChange={setPaymentMethod}
+              exclude={["promissoria"]}
+            />
           </div>
 
           {paymentMethod === "pix" &&
             (pixPayload ? (
-              <PixQRCode payload={pixPayload} amount={totalAmount} />
+              <PixQRCode
+                payload={pixPayload}
+                amount={totalAmount}
+                qrImageUrl={settings?.pix_qrcode_url}
+              />
             ) : (
               <p className="rounded-btn border border-border bg-surface2 p-3 text-sm text-textDim">
                 Pagamento Pix não disponível. Configure nas configurações do salão.
