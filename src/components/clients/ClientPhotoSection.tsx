@@ -5,6 +5,7 @@ import { Camera, Download, ImagePlus, Trash2, Upload } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Skeleton from "@/components/ui/Skeleton";
+import PhotoLightbox from "./PhotoLightbox";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -44,6 +45,7 @@ export default function ClientPhotoSection({ clientId, tipo, title, description 
   const [pendingName, setPendingName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   async function loadPhotos() {
     setLoading(true);
@@ -178,6 +180,12 @@ export default function ClientPhotoSection({ clientId, tipo, title, description 
     setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
   }
 
+  function handleDeleteFromLightbox(photo: ClienteFoto) {
+    // Fecha antes de excluir para nunca deixar o lightbox apontando pra um índice que já saiu do array.
+    setLightboxIndex(null);
+    handleDelete(photo);
+  }
+
   return (
     <div className="flex flex-col gap-3 rounded-btn border border-border p-4">
       <div>
@@ -258,22 +266,27 @@ export default function ClientPhotoSection({ clientId, tipo, title, description 
         <p className="text-xs text-textDim">Nenhuma foto ainda.</p>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {photos.map((photo) => (
+          {photos.map((photo, index) => (
             <div key={photo.id} className="flex flex-col gap-1 rounded-btn border border-border p-1.5">
-              <div className="aspect-square w-full overflow-hidden rounded-btn bg-surface2">
+              <button
+                type="button"
+                onClick={() => setLightboxIndex(index)}
+                aria-label={`Ampliar foto ${photo.nome}`}
+                className="aspect-square w-full overflow-hidden rounded-btn bg-surface2"
+              >
                 {thumbnails[photo.storage_path] ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={thumbnails[photo.storage_path]}
                     alt={photo.nome}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-cover transition duration-200 hover:scale-105"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-textDim">
                     <ImagePlus size={18} />
                   </div>
                 )}
-              </div>
+              </button>
               <p className="truncate text-[11px] font-medium text-text" title={photo.nome}>
                 {photo.nome}
               </p>
@@ -301,6 +314,19 @@ export default function ClientPhotoSection({ clientId, tipo, title, description 
             </div>
           ))}
         </div>
+      )}
+
+      {lightboxIndex !== null && (
+        <PhotoLightbox
+          photos={photos}
+          imageUrls={thumbnails}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+          onDownload={handleDownload}
+          onDelete={handleDeleteFromLightbox}
+          busyId={busyId}
+        />
       )}
     </div>
   );
