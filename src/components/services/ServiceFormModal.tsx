@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Scissors, Package, Save } from "lucide-react";
+import { Scissors, Package, Save, Trash2 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -10,6 +10,7 @@ import Toggle from "@/components/ui/Toggle";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { SERVICE_PACKAGE_PERIODS } from "@/lib/constants";
+import { toISODate } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import type { Service, ServiceType } from "@/lib/types/database";
 
@@ -35,9 +36,15 @@ export default function ServiceFormModal({ open, onClose, onSaved, service }: Se
   const [packagePeriod, setPackagePeriod] = useState("mensal");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    setConfirmingDelete(false);
+    setDeleting(false);
+    setDeleteError("");
     if (service) {
       setTypeChoice(service.type);
       setName(service.name);
@@ -119,6 +126,51 @@ export default function ServiceFormModal({ open, onClose, onSaved, service }: Se
       return;
     }
     showToast(service.is_active ? "Serviço desativado" : "Serviço reativado");
+    onSaved();
+    onClose();
+  }
+
+  async function handleDelete() {
+    if (!service) return;
+    setDeleting(true);
+    setDeleteError("");
+
+    if (service.type === "pacote") {
+      const { count } = await supabase
+        .from("client_packages")
+        .select("id", { count: "exact", head: true })
+        .eq("package_service_id", service.id)
+        .eq("status", "ativo");
+      if ((count ?? 0) > 0) {
+        setDeleting(false);
+        setDeleteError(
+          "Este pacote tem sessões ativas vinculadas a clientes. Aguarde a conclusão ou desative-o em vez de excluir."
+        );
+        return;
+      }
+    } else {
+      const { count } = await supabase
+        .from("appointments")
+        .select("id", { count: "exact", head: true })
+        .eq("service_id", service.id)
+        .eq("status", "agendado")
+        .gte("appointment_date", toISODate(new Date()));
+      if ((count ?? 0) > 0) {
+        setDeleting(false);
+        setDeleteError(
+          "Este serviço tem agendamentos futuros vinculados. Cancele-os antes de excluir."
+        );
+        return;
+      }
+    }
+
+    const { error: deleteErr } = await supabase.from("services").delete().eq("id", service.id);
+    setDeleting(false);
+    if (deleteErr) {
+      setDeleteError(deleteErr.message);
+      return;
+    }
+    showToast(service.type === "pacote" ? "Pacote excluído" : "Serviço excluído");
     onSaved();
     onClose();
   }
@@ -255,6 +307,53 @@ export default function ServiceFormModal({ open, onClose, onSaved, service }: Se
             >
               {service.is_active ? "Desativar serviço" : "Reativar serviço"}
             </Button>
+          )}
+
+          {service && (
+            <div className="border-t border-border pt-4">
+              {confirmingDelete ? (
+                <div className="flex flex-col gap-3 rounded-btn border border-danger/30 bg-danger/10 p-3">
+                  <p className="text-sm text-danger">
+                    Tem certeza que deseja excluir? Esta ação não pode ser desfeita.
+                  </p>
+                  {deleteError && <p className="text-xs text-danger">{deleteError}</p>}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setConfirmingDelete(false)}
+                      disabled={deleting}
+                      className="flex-1"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={handleDelete}
+                      loading={deleting}
+                      className="flex-1"
+                    >
+                      Confirmar exclusão
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={() => {
+                    setDeleteError("");
+                    setConfirmingDelete(true);
+                  }}
+                  disabled={loading}
+                  className="w-full"
+                >
+                  <Trash2 size={16} />
+                  {service.type === "pacote" ? "Excluir pacote" : "Excluir serviço"}
+                </Button>
+              )}
+            </div>
           )}
         </form>
       )}

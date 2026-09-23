@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Save } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
@@ -33,9 +33,15 @@ export default function ProductFormModal({ open, onClose, onSaved, product }: Pr
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    setConfirmingDelete(false);
+    setDeleting(false);
+    setDeleteError("");
     if (product) {
       setName(product.name);
       setBrand(product.brand ?? "");
@@ -161,6 +167,35 @@ export default function ProductFormModal({ open, onClose, onSaved, product }: Pr
     onClose();
   }
 
+  async function handleDelete() {
+    if (!product) return;
+    setDeleting(true);
+    setDeleteError("");
+
+    const { count } = await supabase
+      .from("product_sales")
+      .select("id", { count: "exact", head: true })
+      .eq("product_id", product.id);
+
+    if ((count ?? 0) > 0) {
+      setDeleting(false);
+      setDeleteError(
+        'Este produto já tem vendas/movimentações de estoque registradas. Use "Desativar" em vez de excluir.'
+      );
+      return;
+    }
+
+    const { error: deleteErr } = await supabase.from("products").delete().eq("id", product.id);
+    setDeleting(false);
+    if (deleteErr) {
+      setDeleteError(deleteErr.message);
+      return;
+    }
+    showToast("Produto excluído");
+    onSaved();
+    onClose();
+  }
+
   return (
     <Modal open={open} onClose={onClose} title={product ? "Editar Produto" : "Novo Produto"}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -239,6 +274,53 @@ export default function ProductFormModal({ open, onClose, onSaved, product }: Pr
           >
             {product.is_active ? "Desativar Produto" : "Reativar"}
           </Button>
+        )}
+
+        {product && (
+          <div className="border-t border-border pt-4">
+            {confirmingDelete ? (
+              <div className="flex flex-col gap-3 rounded-btn border border-danger/30 bg-danger/10 p-3">
+                <p className="text-sm text-danger">
+                  Tem certeza que deseja excluir? Esta ação não pode ser desfeita.
+                </p>
+                {deleteError && <p className="text-xs text-danger">{deleteError}</p>}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={deleting}
+                    className="flex-1"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={handleDelete}
+                    loading={deleting}
+                    className="flex-1"
+                  >
+                    Confirmar exclusão
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => {
+                  setDeleteError("");
+                  setConfirmingDelete(true);
+                }}
+                disabled={loading}
+                className="w-full"
+              >
+                <Trash2 size={16} />
+                Excluir Produto
+              </Button>
+            )}
+          </div>
         )}
       </form>
     </Modal>
