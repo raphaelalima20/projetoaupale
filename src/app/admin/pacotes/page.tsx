@@ -31,7 +31,10 @@ export default function PacotesPage() {
     setLoading(true);
     const [{ data: pkgData }, { data: collabData }] = await Promise.all([
       supabase.from("client_packages").select("*").order("purchased_at", { ascending: false }),
-      supabase.from("profiles").select("*").eq("role", "collaborator"),
+      supabase
+        .from("profiles")
+        .select("*")
+        .or("role.eq.collaborator,and(role.eq.admin,is_also_collaborator.eq.true)"),
     ]);
     setPackages((pkgData as ClientPackage[]) ?? []);
     setCollaboratorsById(new Map(((collabData as Profile[]) ?? []).map((c) => [c.id, c])));

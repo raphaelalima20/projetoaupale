@@ -80,6 +80,8 @@ export interface Profile {
   photo_url: string | null;
   avatar_color: string | null;
   is_active: boolean;
+  /** Só faz sentido para role='admin': a admin também atende e aparece como profissional. */
+  is_also_collaborator: boolean;
   invite_token: string | null;
   invite_accepted: boolean;
   created_at: string;

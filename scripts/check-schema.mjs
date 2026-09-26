@@ -388,6 +388,33 @@ await test("find_active_packages (anon) acha por telefone só pacotes ativos e d
   assert((await as("anon", null, () => q(`select * from public.find_active_packages('123')`))).length === 0);
 });
 
+console.log("\nAdmin que também atende (is_also_collaborator)");
+await test("flag só vale para admin; a view public_collaborators inclui a admin apenas quando ligada e ativa", async () => {
+  await rejects(q(`update public.profiles set is_also_collaborator=true where id='${COLLAB}'`), /profiles_also_collab_admin_only/);
+  const names = async () => (await as("anon", null, () => q(`select id from public.public_collaborators`))).map((r) => r.id);
+  assert(!(await names()).includes(ADMIN), "admin sem flag não pode aparecer");
+  await db.exec(`update public.profiles set is_also_collaborator=true where id='${ADMIN}'`);
+  assert((await names()).includes(ADMIN), "admin com flag deve aparecer");
+  await db.exec(`update public.profiles set is_active=false where id='${ADMIN}'`);
+  assert(!(await names()).includes(ADMIN), "admin inativa não aparece");
+  await db.exec(`update public.profiles set is_active=true where id='${ADMIN}'`);
+});
+await test("admin-colaboradora gera comissão e pode ser paga via pay_commissions; sem a flag é recusada", async () => {
+  await db.exec(`insert into public.appointments (client_name, client_phone, collaborator_id, service_name, appointment_date, appointment_time)
+    values ('Bia','11933334444','${ADMIN}','Corte','2030-07-01','10:00')`);
+  await db.exec(`update public.appointments set status='concluido', final_amount=100, commission_value=30 where collaborator_id='${ADMIN}' and appointment_date='2030-07-01'`);
+  const comm = await as("authenticated", ADMIN, () => q(`select id from public.commissions where collaborator_id='${ADMIN}' and is_paid=false`));
+  assert(comm.length === 1, "comissão da admin deveria existir");
+  const ids = comm.map((c) => c.id);
+  await db.exec(`update public.profiles set is_also_collaborator=false where id='${ADMIN}'`);
+  await as("authenticated", ADMIN, () => rejects(q(`select public.pay_commissions($1, $2::uuid[], 'pix', false, null)`, [ADMIN, ids]), /Colaboradora não encontrada/));
+  await db.exec(`update public.profiles set is_also_collaborator=true where id='${ADMIN}'`);
+  const [{ pay_commissions: pid }] = await as("authenticated", ADMIN, () => q(`select public.pay_commissions($1, $2::uuid[], 'pix', false, null)`, [ADMIN, ids]));
+  const [p] = await q(`select total_amount, collaborator_id from public.commission_payments where id='${pid}'`);
+  assert(Number(p.total_amount) === 30 && p.collaborator_id === ADMIN, JSON.stringify(p));
+  await db.exec(`update public.profiles set is_also_collaborator=false where id='${ADMIN}'`);
+});
+
 console.log("\nEstoque, caixa e clientes");
 await test("venda baixa o estoque; estoque insuficiente é rejeitado", async () => {
   await db.exec(`insert into public.products (name, price, stock_quantity) values ('Shampoo', 50, 3)`);

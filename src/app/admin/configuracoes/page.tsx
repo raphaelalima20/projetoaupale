@@ -12,6 +12,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import PasswordInput from "@/components/ui/PasswordInput";
 import ImageUpload from "@/components/products/ImageUpload";
 import WhatsappSettings from "@/components/whatsapp/WhatsappSettings";
+import AdminProfessionalCard from "@/components/collaborators/AdminProfessionalCard";
 import ThemeToggle from "@/components/layout/ThemeToggle";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -331,6 +332,8 @@ export default function ConfiguracoesPage() {
           <Save size={16} />
           Salvar Configurações
         </Button>
+
+        <AdminProfessionalCard />
 
         <WhatsappSettings />
 

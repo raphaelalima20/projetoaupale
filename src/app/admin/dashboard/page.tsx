@@ -147,7 +147,10 @@ export default function DashboardPage() {
           .order("appointment_time", { ascending: true })
           .limit(5),
         supabase.from("cart_orders").select("id", { count: "exact", head: true }).eq("status", "pendente"),
-        supabase.from("profiles").select("*").eq("role", "collaborator"),
+        supabase
+          .from("profiles")
+          .select("*")
+          .or("role.eq.collaborator,and(role.eq.admin,is_also_collaborator.eq.true)"),
         supabase.from("receivables").select("remaining_amount").neq("status", "pago"),
       ]);
 

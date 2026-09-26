@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     .from("profiles")
     .select("id, full_name")
     .eq("id", collaboratorId)
-    .eq("role", "collaborator")
+    .or("role.eq.collaborator,and(role.eq.admin,is_also_collaborator.eq.true)")
     .eq("is_active", true)
     .maybeSingle();
   if (!collaborator) return fail("Profissional inválida.");

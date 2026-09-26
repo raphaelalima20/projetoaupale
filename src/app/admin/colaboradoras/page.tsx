@@ -64,7 +64,7 @@ export default function ColaboradorasPage() {
   }
 
   const activeCollaborators = collaborators.filter(
-    (c) => c.role === "collaborator" && c.is_active
+    (c) => (c.role === "collaborator" || c.is_also_collaborator) && c.is_active
   );
 
   const todayISO = toISODate(new Date());
@@ -121,14 +121,17 @@ export default function ColaboradorasPage() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <p className="truncate text-sm font-medium text-text">{c.full_name}</p>
                   {c.role === "admin" && <Badge tone="gold">Admin</Badge>}
+                  {c.role === "admin" && c.is_also_collaborator && (
+                    <Badge tone="pink">Atende</Badge>
+                  )}
                 </div>
                 <div className="flex min-w-0 items-center gap-1 text-xs text-textDim">
-                  {c.role === "admin" ? (
+                  {c.role === "admin" && !c.is_also_collaborator ? (
                     <span>Administradora</span>
                   ) : (
                     <SpecialtyText specialty={c.specialty} />
                   )}
-                  {c.role === "collaborator" && (
+                  {(c.role === "collaborator" || c.is_also_collaborator) && (
                     <span className="shrink-0">· Comissão: {c.commission_percentage}%</span>
                   )}
                 </div>

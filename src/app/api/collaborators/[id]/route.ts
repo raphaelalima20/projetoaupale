@@ -36,9 +36,15 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
 
   const admin = createAdminClient();
 
-  const { data: target } = await admin.from("profiles").select("id").eq("id", id).single();
+  const { data: target } = await admin.from("profiles").select("id, role").eq("id", id).single();
   if (!target) {
     return NextResponse.json({ error: "Colaboradora não encontrada." }, { status: 404 });
+  }
+  if (target.role !== "collaborator") {
+    return NextResponse.json(
+      { error: "Contas de administradora não podem ser excluídas por aqui." },
+      { status: 400 }
+    );
   }
 
   const today = toISODate(new Date());

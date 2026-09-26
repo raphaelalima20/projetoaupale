@@ -191,6 +191,7 @@ export default function CollaboratorFormModal({
           photo_url: photoUrl,
           avatar_color: avatarColor,
           role: isSelf ? collaborator.role : role,
+          is_also_collaborator: (isSelf ? collaborator.role : role) === "admin" && collaborator.is_also_collaborator,
           commission_percentage: pct(commissionPct),
           commission_chemical_percentage: pct(commissionChemicalPct),
         })
@@ -507,7 +508,14 @@ export default function CollaboratorFormModal({
           </Button>
         )}
 
-        {collaborator && (
+        {collaborator?.is_also_collaborator && (
+          <p className="rounded-btn border border-border bg-surface2 p-3 text-xs text-textDim">
+            Admin que também atende. Para ativar/desativar como profissional, use{" "}
+            <span className="text-text">Configurações → Perfil profissional</span>.
+          </p>
+        )}
+
+        {collaborator && !collaborator.is_also_collaborator && (
           <Button
             type="button"
             variant={collaborator.is_active ? "danger" : "secondary"}
@@ -519,7 +527,7 @@ export default function CollaboratorFormModal({
           </Button>
         )}
 
-        {collaborator && !isSelf && (
+        {collaborator && !isSelf && collaborator.role === "collaborator" && (
           <div className="border-t border-border pt-4">
             {confirmingDelete ? (
               <div className="flex flex-col gap-3 rounded-btn border border-danger/30 bg-danger/10 p-3">
