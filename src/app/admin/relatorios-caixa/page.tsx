@@ -12,7 +12,9 @@ import PaymentBreakdownGrid from "@/components/cash/PaymentBreakdownGrid";
 import CashRegisterListItem from "@/components/cash/CashRegisterListItem";
 import ReceivablesSection from "@/components/receivables/ReceivablesSection";
 import { createClient } from "@/lib/supabase/client";
-import { computePaymentTotals } from "@/lib/cash";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { useToast } from "@/components/ui/Toast";
+import { computePaymentTotals, deleteCashTransaction } from "@/lib/cash";
 import { generateAccountingReportPdf } from "@/lib/pdf";
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils";
 import { getMonday, toISODate, parseISODate, addDays } from "@/lib/schedule";
@@ -51,6 +53,9 @@ const PERIOD_LABELS: Record<PeriodPreset, string> = {
 
 export default function RelatoriosCaixaPage() {
   const [supabase] = useState(() => createClient());
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === "admin";
+  const { showToast } = useToast();
   const [preset, setPreset] = useState<PeriodPreset>("semana");
   const [customStart, setCustomStart] = useState(toISODate(new Date()));
   const [customEnd, setCustomEnd] = useState(toISODate(new Date()));
@@ -60,8 +65,8 @@ export default function RelatoriosCaixaPage() {
   const [promissoriaTotals, setPromissoriaTotals] = useState({ total: 0, count: 0 });
   const [loading, setLoading] = useState(true);
 
-  async function fetchReport() {
-    setLoading(true);
+  async function fetchReport(opts?: { silent?: boolean }) {
+    if (!opts?.silent) setLoading(true);
     const { start, end } = getPeriodRange(preset, customStart, customEnd);
     const startISO = toISODate(start);
     const endExclusiveISO = toISODate(addDays(end, 1));
@@ -123,6 +128,16 @@ export default function RelatoriosCaixaPage() {
   const netResult = totalEntries - totalExits;
   const paymentTotals = computePaymentTotals(transactions);
 
+  async function handleDeleteTransaction(transaction: CashTransaction) {
+    const { error } = await deleteCashTransaction(supabase, transaction);
+    if (error) return error;
+    // Remove na hora e depois recarrega do banco (totais e resumo do fechamento atualizados).
+    setTransactions((prev) => prev.filter((t) => t.id !== transaction.id));
+    showToast("Movimentação excluída");
+    fetchReport({ silent: true });
+    return null;
+  }
+
   function transactionsFor(registerId: string) {
     return transactions.filter((t) => t.cash_register_id === registerId);
   }
@@ -173,7 +188,7 @@ export default function RelatoriosCaixaPage() {
           onChangePreset={setPreset}
           onChangeCustomStart={setCustomStart}
           onChangeCustomEnd={setCustomEnd}
-          onApply={fetchReport}
+          onApply={() => fetchReport()}
         />
       </Card>
 
@@ -216,7 +231,12 @@ export default function RelatoriosCaixaPage() {
             ) : (
               <div className="flex flex-col gap-2">
                 {registers.map((r) => (
-                  <CashRegisterListItem key={r.id} register={r} transactions={transactionsFor(r.id)} />
+                  <CashRegisterListItem
+                    key={r.id}
+                    register={r}
+                    transactions={transactionsFor(r.id)}
+                    onDeleteTransaction={isAdmin ? handleDeleteTransaction : undefined}
+                  />
                 ))}
               </div>
             )}

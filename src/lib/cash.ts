@@ -51,3 +51,58 @@ export function computeCashSummary(
     paymentTotals: computePaymentTotals(transactions),
   };
 }
+
+type SupabaseBrowserClient = ReturnType<typeof import("./supabase/client").createClient>;
+
+/**
+ * Exclui uma movimentação de caixa (somente admin — garantido pela RLS) e, se o caixa
+ * já estiver fechado, regrava o resumo do fechamento a partir das transações restantes.
+ * O trigger `cash_transactions_recalc_totals` faz o mesmo no banco (cobre exclusões feitas
+ * direto no Supabase); repetir aqui garante a consistência mesmo antes da migração.
+ */
+export async function deleteCashTransaction(
+  supabase: SupabaseBrowserClient,
+  transaction: CashTransaction
+): Promise<{ error: string | null }> {
+  const { data: deleted, error } = await supabase
+    .from("cash_transactions")
+    .delete()
+    .eq("id", transaction.id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!deleted || deleted.length === 0) {
+    return { error: "Não foi possível excluir: movimentação não encontrada ou sem permissão." };
+  }
+
+  const registerId = transaction.cash_register_id;
+  if (!registerId) return { error: null };
+
+  const { data: register } = await supabase
+    .from("cash_register")
+    .select("id, status, opening_amount")
+    .eq("id", registerId)
+    .maybeSingle();
+  if (!register || register.status !== "fechado") return { error: null };
+
+  const { data: remaining, error: txError } = await supabase
+    .from("cash_transactions")
+    .select("*")
+    .eq("cash_register_id", registerId);
+  if (txError) return { error: null };
+
+  const summary = computeCashSummary((remaining as CashTransaction[]) ?? [], register.opening_amount);
+  await supabase
+    .from("cash_register")
+    .update({
+      total_pix: summary.paymentTotals.pix.total,
+      total_dinheiro: summary.paymentTotals.dinheiro.total,
+      total_credito: summary.paymentTotals.credito.total,
+      total_debito: summary.paymentTotals.debito.total,
+      total_entries: summary.totalEntries,
+      total_exits: summary.totalExits,
+      total_day: summary.totalDay,
+    })
+    .eq("id", registerId);
+
+  return { error: null };
+}

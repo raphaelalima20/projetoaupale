@@ -17,18 +17,21 @@ import { useCashTransactions } from "@/lib/hooks/useCashTransactions";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { computeCashSummary } from "@/lib/cash";
+import { computeCashSummary, deleteCashTransaction } from "@/lib/cash";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { TransactionType } from "@/lib/types/database";
+import type { CashTransaction, TransactionType } from "@/lib/types/database";
 
 export default function CaixaPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isAdmin = profile?.role === "admin";
   const { showToast } = useToast();
   const [supabase] = useState(() => createClient());
   const { register, lastClosed, loading: loadingRegister, refetch: refetchRegister } =
     useOpenCashRegister();
+  // Com o caixa fechado, carrega as transações do último fechamento para mostrar o total
+  // real (somado a partir do banco), e não o valor gravado no momento do fechamento.
   const { transactions, loading: loadingTransactions, refetch: refetchTransactions } =
-    useCashTransactions(register?.id ?? null);
+    useCashTransactions(register?.id ?? lastClosed?.id ?? null);
 
   const [openingAmount, setOpeningAmount] = useState("");
   const [openingLoading, setOpeningLoading] = useState(false);
@@ -56,6 +59,16 @@ export default function CaixaPage() {
   }
 
   const summary = register ? computeCashSummary(transactions, register.opening_amount) : null;
+  const lastClosedSummary =
+    !register && lastClosed ? computeCashSummary(transactions, lastClosed.opening_amount) : null;
+
+  async function handleDeleteTransaction(transaction: CashTransaction) {
+    const { error } = await deleteCashTransaction(supabase, transaction);
+    if (error) return error;
+    showToast("Movimentação excluída");
+    await refetchTransactions({ silent: true });
+    return null;
+  }
 
   async function handleCloseCash(notes: string) {
     if (!register || !summary || !user) return;
@@ -108,7 +121,9 @@ export default function CaixaPage() {
             <p className="mt-1 text-sm text-textDim">
               {lastClosed
                 ? `Último fechamento: ${formatDate(new Date(lastClosed.closed_at as string))} — ${formatCurrency(
-                    lastClosed.total_day
+                    loadingTransactions || !lastClosedSummary
+                      ? lastClosed.total_day
+                      : lastClosedSummary.totalDay
                   )}`
                 : "Abra o caixa para começar a registrar movimentações"}
             </p>
@@ -190,7 +205,11 @@ export default function CaixaPage() {
         ) : (
           <div className="flex flex-col gap-2">
             {sortedTransactions.map((t) => (
-              <CashTransactionItem key={t.id} transaction={t} />
+              <CashTransactionItem
+                key={t.id}
+                transaction={t}
+                onDelete={isAdmin ? handleDeleteTransaction : undefined}
+              />
             ))}
           </div>
         )}
@@ -200,7 +219,7 @@ export default function CaixaPage() {
         <ManualTransactionModal
           open={!!manualType}
           onClose={() => setManualType(null)}
-          onCreated={refetchTransactions}
+          onCreated={() => refetchTransactions()}
           type={manualType}
           cashRegisterId={register.id}
           currentUserId={user?.id ?? ""}

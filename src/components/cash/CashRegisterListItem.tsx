@@ -11,11 +11,14 @@ import type { CashRegister, CashTransaction } from "@/lib/types/database";
 interface CashRegisterListItemProps {
   register: CashRegister;
   transactions: CashTransaction[];
+  /** Admin: excluir movimentação (funciona com o caixa aberto ou fechado). */
+  onDeleteTransaction?: (transaction: CashTransaction) => Promise<string | null>;
 }
 
 export default function CashRegisterListItem({
   register,
   transactions,
+  onDeleteTransaction,
 }: CashRegisterListItemProps) {
   const [expanded, setExpanded] = useState(false);
   const entries = transactions.filter((t) => t.type === "entrada").reduce((s, t) => s + t.amount, 0);
@@ -46,13 +49,26 @@ export default function CashRegisterListItem({
       </button>
       {expanded && (
         <div className="flex flex-col gap-2 border-t border-border p-4">
+          <div className="mb-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-textDim">
+            <span>
+              Entradas: <span className="text-success">{formatCurrency(entries)}</span>
+            </span>
+            <span>
+              Saídas: <span className="text-danger">{formatCurrency(exits)}</span>
+            </span>
+            <span>
+              Saldo: <span className="text-text">{formatCurrency(total)}</span>
+            </span>
+          </div>
           {transactions.length === 0 ? (
             <p className="text-sm text-textDim">Nenhuma movimentação</p>
           ) : (
             transactions
               .slice()
               .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-              .map((t) => <CashTransactionItem key={t.id} transaction={t} />)
+              .map((t) => (
+                <CashTransactionItem key={t.id} transaction={t} onDelete={onDeleteTransaction} />
+              ))
           )}
         </div>
       )}

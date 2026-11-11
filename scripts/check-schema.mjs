@@ -512,6 +512,43 @@ await test("storage 'cliente-fotos': só staff lê/escreve objetos do bucket", a
   assert((await as("authenticated", ADMIN, () => q(`select 1 from storage.objects where bucket_id='cliente-fotos'`))).length === 1);
 });
 
+console.log("\nCaixa — exclusão de movimentações e recálculo do fechamento");
+await test("excluir transação de caixa FECHADO recalcula total_entries/exits/day e por forma", async () => {
+  const [reg] = await q(
+    `insert into public.cash_register (status, opening_amount, closed_at, total_day, total_entries)
+     values ('fechado', 50, now(), 999, 999) returning id`
+  );
+  await q(
+    `insert into public.cash_transactions (cash_register_id, type, amount, payment_method, description) values
+       ($1, 'entrada', 100, 'pix', 'a'), ($1, 'entrada', 40, 'dinheiro', 'b'), ($1, 'saida', 30, 'dinheiro', 'c')`,
+    [reg.id]
+  );
+  let [r] = await q(`select total_entries, total_exits, total_day, total_pix, total_dinheiro from public.cash_register where id=$1`, [reg.id]);
+  assert(Number(r.total_entries) === 140 && Number(r.total_exits) === 30 && Number(r.total_day) === 110, `insert: ${JSON.stringify(r)}`);
+  const del = await as("authenticated", ADMIN, () =>
+    q(`delete from public.cash_transactions where cash_register_id=$1 and description='a' returning id`, [reg.id])
+  );
+  assert(del.length === 1, "admin deveria conseguir excluir");
+  [r] = await q(`select total_entries, total_exits, total_day, total_pix, total_dinheiro from public.cash_register where id=$1`, [reg.id]);
+  assert(
+    Number(r.total_entries) === 40 && Number(r.total_day) === 10 && Number(r.total_pix) === 0 && Number(r.total_dinheiro) === 40,
+    `delete: ${JSON.stringify(r)}`
+  );
+});
+await test("caixa ABERTO não tem os totais gravados alterados pelo trigger", async () => {
+  const [open] = await q(`select id, total_day from public.cash_register where status='aberto'`);
+  await q(`insert into public.cash_transactions (cash_register_id, type, amount, payment_method) values ($1, 'entrada', 5, 'pix')`, [open.id]);
+  const [r] = await q(`select total_day from public.cash_register where id=$1`, [open.id]);
+  assert(Number(r.total_day) === Number(open.total_day));
+});
+await test("colaboradora e anon NÃO excluem transações de caixa", async () => {
+  const before = (await q(`select 1 from public.cash_transactions`)).length;
+  const del = await as("authenticated", COLLAB, () => q(`delete from public.cash_transactions returning id`));
+  assert(del.length === 0, "colaboradora excluiu transação");
+  await as("anon", null, () => rejects(q(`delete from public.cash_transactions`), /permission denied/));
+  assert((await q(`select 1 from public.cash_transactions`)).length === before);
+});
+
 console.log(`\n${passed} testes passaram, ${failures.length} falharam.`);
 if (failures.length) {
   console.log("Falhas:\n - " + failures.join("\n - "));
